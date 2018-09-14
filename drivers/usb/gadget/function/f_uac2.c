@@ -690,18 +690,6 @@ static struct usb_gadget_strings *fn_strings[] = {
 	NULL,
 };
 
-static struct usb_qualifier_descriptor devqual_desc = {
-	.bLength = sizeof devqual_desc,
-	.bDescriptorType = USB_DT_DEVICE_QUALIFIER,
-
-	.bcdUSB = cpu_to_le16(0x200),
-	.bDeviceClass = USB_CLASS_MISC,
-	.bDeviceSubClass = 0x02,
-	.bDeviceProtocol = 0x01,
-	.bNumConfigurations = 1,
-	.bRESERVED = 0,
-};
-
 static struct usb_interface_assoc_descriptor iad_desc = {
 	.bLength = sizeof iad_desc,
 	.bDescriptorType = USB_DT_INTERFACE_ASSOCIATION,
@@ -1989,19 +1977,21 @@ in_rq_range(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 
 	pr_debug("%s: entity_id:%u\n", __func__, entity_id);
 	if (control_selector == UAC2_CS_CONTROL_SAM_FREQ) {
-		if (entity_id == USB_IN_CLK_ID)
-			r.dMIN = cpu_to_le32(p_srate);
-		else if (entity_id == USB_OUT_CLK_ID)
-			r.dMIN = cpu_to_le32(c_srate);
-		else
+
+		if (entity_id == USB_IN_CLK_ID || entity_id == USB_OUT_CLK_ID) {
+			int i;
+
+			r.wNumSubRanges = CLK_FREQ_ARR_SIZE;
+			for (i = 0; i < CLK_FREQ_ARR_SIZE; i++) {
+				r.dRangeAttrs[i][0] = clk_frequencies[i];
+				r.dRangeAttrs[i][1] = r.dRangeAttrs[i][0];
+				r.dRangeAttrs[i][2] = 0;
+			}
+			value = min_t(unsigned, w_length, sizeof(r));
+			memcpy(req->buf, &r, value);
+		} else
 			return -EOPNOTSUPP;
 
-		r.dMAX = r.dMIN;
-		r.dRES = 0;
-		r.wNumSubRanges = cpu_to_le16(1);
-
-		value = min_t(unsigned, w_length, sizeof r);
-		memcpy(req->buf, &r, value);
 	} else {
 		dev_err(&uac2->pdev.dev,
 			"%s:%d control_selector=%d TODO!\n",
